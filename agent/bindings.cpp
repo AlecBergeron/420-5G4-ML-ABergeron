@@ -87,6 +87,7 @@ PYBIND11_MODULE(bibliotheque_py, m) {
         .def("get_all_books",
              [](Library& library) { return copiesOf(library.getAllBooks()); })
         .def("add_user", &Library::addUser, py::arg("user"))
+        .def("remove_user", &Library::removeUser, py::arg("user_id"))
         .def("find_user_by_id", &Library::findUserById, py::arg("user_id"),
              py::return_value_policy::reference_internal)
         .def("get_all_users",

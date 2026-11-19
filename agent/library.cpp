@@ -96,6 +96,20 @@ void Library::addUser(const User& user) {
     users.push_back(make_unique<User>(user));
 }
 
+// Remove user from library
+bool Library::removeUser(const string& userId) {
+    auto it = find_if(users.begin(), users.end(),
+        [&userId](const unique_ptr<User>& user) {
+            return user->getUserId() == userId;
+        });
+    
+    if (it != users.end()) {
+        users.erase(it);
+        return true;
+    }
+    return false;
+}
+
 // Find user by ID
 User* Library::findUserById(const string& userId) {
     auto it = find_if(users.begin(), users.end(),

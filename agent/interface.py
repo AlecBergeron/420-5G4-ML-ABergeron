@@ -169,32 +169,7 @@ class FenetreModale(ctk.CTkToplevel):
     def effacer_erreur(self):
         self.label_erreur.configure(text="")
 
-    def valider(self):
-        pass
-
-    def fermer(self):
-        try:
-            self.grab_release()
-        except Exception:
-            pass
-        self.destroy()
-
-
-class ModalAjouterLivre(FenetreModale):
-    def __init__(self, parent, bibliotheque, on_ajout=None):
-        super().__init__(parent, "Ajouter un livre", largeur=640, hauteur=540)
-        self.bibliotheque = bibliotheque
-        self.on_ajout = on_ajout
-        self.titre = ctk.StringVar()
-        self.auteur = ctk.StringVar()
-        self.isbn = ctk.StringVar()
-
-        self.entree_titre = self._ajouter_champ(0, "Titre :", self.titre)
-        self.entree_auteur = self._ajouter_champ(1, "Auteur :", self.auteur)
-        self.entree_isbn = self._ajouter_champ(2, "ISBN :", self.isbn)
-        self.entree_titre.focus_set()
-
-    def _ajouter_champ(self, ligne, libelle, variable):
+    def ajouter_champ(self, ligne, libelle, variable):
         ctk.CTkLabel(
             self.panneau_formulaire,
             text=libelle,
@@ -218,6 +193,31 @@ class ModalAjouterLivre(FenetreModale):
         return entree
 
     def valider(self):
+        pass
+
+    def fermer(self):
+        try:
+            self.grab_release()
+        except Exception:
+            pass
+        self.destroy()
+
+
+class ModalAjouterLivre(FenetreModale):
+    def __init__(self, parent, bibliotheque, on_ajout=None):
+        super().__init__(parent, "Ajouter un livre", largeur=640, hauteur=540)
+        self.bibliotheque = bibliotheque
+        self.on_ajout = on_ajout
+        self.titre = ctk.StringVar()
+        self.auteur = ctk.StringVar()
+        self.isbn = ctk.StringVar()
+
+        self.entree_titre = self.ajouter_champ(0, "Titre :", self.titre)
+        self.entree_auteur = self.ajouter_champ(1, "Auteur :", self.auteur)
+        self.entree_isbn = self.ajouter_champ(2, "ISBN :", self.isbn)
+        self.entree_titre.focus_set()
+
+    def valider(self):
         self.effacer_erreur()
         titre = self.titre.get().strip()
         auteur = self.auteur.get().strip()
@@ -232,6 +232,39 @@ class ModalAjouterLivre(FenetreModale):
             return
 
         self.bibliotheque.add_book(bibliotheque_py.Book(titre, auteur, isbn))
+        if self.on_ajout is not None:
+            self.on_ajout()
+        self.fermer()
+
+
+class ModalAjouterUtilisateur(FenetreModale):
+    def __init__(self, parent, bibliotheque, on_ajout=None):
+        super().__init__(parent, "Ajouter un utilisateur", largeur=640, hauteur=480)
+        self.bibliotheque = bibliotheque
+        self.on_ajout = on_ajout
+        self.nom = ctk.StringVar()
+        self.identifiant = ctk.StringVar()
+
+        self.entree_nom = self.ajouter_champ(0, "Nom :", self.nom)
+        self.entree_identifiant = self.ajouter_champ(
+            1, "Identifiant :", self.identifiant
+        )
+        self.entree_nom.focus_set()
+
+    def valider(self):
+        self.effacer_erreur()
+        nom = self.nom.get().strip()
+        identifiant = self.identifiant.get().strip()
+
+        if not nom or not identifiant:
+            self.afficher_erreur("Tous les champs sont obligatoires.")
+            return
+
+        if self.bibliotheque.find_user_by_id(identifiant) is not None:
+            self.afficher_erreur("Un utilisateur avec cet identifiant existe déjà.")
+            return
+
+        self.bibliotheque.add_user(bibliotheque_py.User(nom, identifiant))
         if self.on_ajout is not None:
             self.on_ajout()
         self.fermer()
@@ -360,8 +393,13 @@ class ModalSelection(FenetreModale):
 
 def formater_utilisateur(utilisateur):
     nombre = utilisateur.borrowed_book_count()
-    suffixe = "s" if nombre > 1 else ""
-    return f"{utilisateur.name}, {utilisateur.user_id}, {nombre} emprunt{suffixe}"
+    if nombre == 0:
+        etat = "n'a pas d'emprunt"
+    elif nombre == 1:
+        etat = "a un emprunt"
+    else:
+        etat = f"a {nombre} emprunts"
+    return f"{utilisateur.name}, {utilisateur.user_id}, {etat}"
 
 
 class ModalChoisirLivre(ModalSelection):
@@ -779,7 +817,239 @@ class PageLivres(PagePrincipale):
 
 
 class PageUsers(PagePrincipale):
-    pass
+    def __init__(self, parent, commande_quitter, bibliotheque, **kwargs):
+        super().__init__(parent, commande_quitter, **kwargs)
+        self.bibliotheque = bibliotheque
+        self.recherche = ctk.StringVar()
+        self.utilisateur_selectionne = None
+        self.lignes_users = {}
+
+        self.bouton_ajouter = creer_bouton_action(
+            self.zone_actions,
+            "Ajouter",
+            self.ouvrir_modal_ajout,
+        )
+        self.bouton_ajouter.grid(row=0, column=0, sticky="e")
+
+        self.bouton_supprimer = creer_bouton_action(
+            self.zone_actions,
+            "Supprimer",
+            self.supprimer_utilisateur,
+            state="disabled",
+            text_color_disabled=COULEURS["texte_desactive"],
+        )
+        self.bouton_supprimer.grid(row=1, column=0, sticky="e", pady=(12, 0))
+
+        self.bouton_emprunter = creer_bouton_action(
+            self.zone_actions,
+            "Emprunter",
+            self.ouvrir_modal_emprunt,
+        )
+        self.bouton_emprunter.grid(row=2, column=0, sticky="e", pady=(12, 0))
+
+        self.bouton_retourner = creer_bouton_action(
+            self.zone_actions,
+            "Retourner",
+            self.ouvrir_modal_retour,
+        )
+        self.bouton_retourner.grid(row=3, column=0, sticky="e", pady=(12, 0))
+
+        self.panneau_contenu.grid_rowconfigure(0, weight=0)
+        self.panneau_contenu.grid_rowconfigure(1, weight=0)
+        self.panneau_contenu.grid_rowconfigure(2, weight=1)
+        self.panneau_contenu.grid_rowconfigure(3, weight=0)
+        self.panneau_contenu.grid_columnconfigure(0, weight=1)
+
+        self.entree_recherche = ctk.CTkEntry(
+            self.panneau_contenu,
+            textvariable=self.recherche,
+            placeholder_text="Rechercher",
+            height=54,
+            corner_radius=0,
+            border_width=0,
+            fg_color=COULEURS["panneau"],
+            text_color=COULEURS["texte"],
+            placeholder_text_color="#555555",
+            font=("Helvetica", 20),
+        )
+        self.entree_recherche.grid(row=0, column=0, sticky="ew", padx=24, pady=10)
+
+        separateur = ctk.CTkFrame(
+            self.panneau_contenu,
+            height=1,
+            fg_color=COULEURS["bordure"],
+            corner_radius=0,
+        )
+        separateur.grid(row=1, column=0, sticky="ew", padx=(1, 1))
+
+        self.liste_users = ctk.CTkScrollableFrame(
+            self.panneau_contenu,
+            fg_color=COULEURS["panneau"],
+            corner_radius=0,
+            border_width=0,
+            label_text="",
+        )
+        self.liste_users.grid(row=2, column=0, sticky="nsew", padx=(1, 1))
+
+        ligne_bas = ctk.CTkFrame(
+            self.panneau_contenu,
+            height=1,
+            fg_color=COULEURS["bordure"],
+            corner_radius=0,
+        )
+        ligne_bas.grid(row=3, column=0, sticky="ew", padx=(1, 1))
+
+        self.recherche.trace_add("write", self.actualiser_liste)
+        self.actualiser_liste()
+
+    def actualiser_liste(self, *_):
+        self.utilisateur_selectionne = None
+        self.lignes_users = {}
+        self.bouton_supprimer.configure(state="disabled")
+
+        for widget in self.liste_users.winfo_children():
+            widget.destroy()
+
+        utilisateurs = self.bibliotheque.get_all_users()
+        recherche = self.recherche.get().strip()
+        if recherche:
+            requete = recherche.casefold()
+            utilisateurs = [
+                utilisateur
+                for utilisateur in utilisateurs
+                if requete in utilisateur.name.casefold()
+                or requete in utilisateur.user_id.casefold()
+            ]
+
+        if not utilisateurs:
+            ctk.CTkLabel(
+                self.liste_users,
+                text="Aucun utilisateur trouvé",
+                anchor="w",
+                text_color="#666666",
+                font=("Helvetica", 16),
+            ).pack(fill="x", padx=24, pady=12)
+            return
+
+        for utilisateur in utilisateurs:
+            ligne = ctk.CTkLabel(
+                self.liste_users,
+                text=formater_utilisateur(utilisateur),
+                anchor="w",
+                justify="left",
+                height=34,
+                fg_color="transparent",
+                text_color=COULEURS["texte"],
+                font=("Helvetica", 16),
+                cursor="hand2",
+            )
+            ligne.pack(fill="x", padx=24, pady=0)
+            ligne.bind(
+                "<Button-1>",
+                lambda _, user_id=utilisateur.user_id: self.selectionner_utilisateur(
+                    user_id
+                ),
+            )
+            self.lignes_users[utilisateur.user_id] = ligne
+
+    def selectionner_utilisateur(self, user_id):
+        self.utilisateur_selectionne = user_id
+        for autre_id, ligne in self.lignes_users.items():
+            ligne.configure(
+                fg_color=COULEURS["selection"]
+                if autre_id == user_id
+                else "transparent"
+            )
+        self.bouton_supprimer.configure(state="normal")
+
+    def ouvrir_modal_ajout(self):
+        ModalAjouterUtilisateur(
+            self.winfo_toplevel(),
+            self.bibliotheque,
+            self.actualiser_liste,
+        )
+
+    def supprimer_utilisateur(self):
+        user_id = self.utilisateur_selectionne
+        if user_id is None:
+            return
+
+        utilisateur = self.bibliotheque.find_user_by_id(user_id)
+        if utilisateur is None:
+            self.actualiser_liste()
+            return
+
+        if utilisateur.borrowed_book_count() > 0:
+            messagebox.showerror(
+                "Suppression impossible",
+                "Cet utilisateur a des emprunts en cours et ne peut pas être supprimé.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+
+        if not self.bibliotheque.remove_user(user_id):
+            messagebox.showerror(
+                "Suppression impossible",
+                "Impossible de supprimer cet utilisateur.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+
+        self.actualiser_liste()
+
+    def ouvrir_modal_emprunt(self):
+        ModalChoisirUtilisateur(
+            self.winfo_toplevel(),
+            self.bibliotheque.get_all_users(),
+            self._choisir_livre_pour_emprunt,
+        )
+
+    def _choisir_livre_pour_emprunt(self, utilisateur):
+        ModalChoisirLivre(
+            self.winfo_toplevel(),
+            self.bibliotheque.get_available_books(),
+            lambda livre: self.emprunter_livre(livre.isbn, utilisateur.user_id),
+        )
+
+    def emprunter_livre(self, isbn, user_id):
+        if not self.bibliotheque.check_out_book(isbn, user_id):
+            messagebox.showerror(
+                "Emprunt impossible",
+                "Impossible d'emprunter ce livre.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        self.actualiser_liste()
+
+    def ouvrir_modal_retour(self):
+        ModalChoisirUtilisateur(
+            self.winfo_toplevel(),
+            self.bibliotheque.get_all_users(),
+            self._choisir_livre_pour_retour,
+        )
+
+    def _choisir_livre_pour_retour(self, utilisateur):
+        livres = []
+        for isbn in utilisateur.borrowed_books:
+            livre = self.bibliotheque.find_book_by_isbn(isbn)
+            if livre is not None and not livre.is_available:
+                livres.append(livre)
+
+        ModalChoisirLivre(
+            self.winfo_toplevel(),
+            livres,
+            self.retourner_livre,
+        )
+
+    def retourner_livre(self, livre):
+        if not self.bibliotheque.return_book(livre.isbn):
+            messagebox.showerror(
+                "Retour impossible",
+                "Impossible de retourner ce livre.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        self.actualiser_liste()
 
 
 class PageSauvegarde(PagePrincipale):
@@ -820,7 +1090,7 @@ class ApplicationBibliotheque(ctk.CTk):
 
         self.pages = {
             "livres": PageLivres(self.conteneur, self.quitter, self.bibliotheque),
-            "users": PageUsers(self.conteneur, self.quitter),
+            "users": PageUsers(self.conteneur, self.quitter, self.bibliotheque),
             "sauvegarde": PageSauvegarde(self.conteneur, self.quitter),
         }
         for page in self.pages.values():
