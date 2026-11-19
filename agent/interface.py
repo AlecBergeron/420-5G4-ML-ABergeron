@@ -1053,7 +1053,127 @@ class PageUsers(PagePrincipale):
 
 
 class PageSauvegarde(PagePrincipale):
-    pass
+    def __init__(
+        self, parent, commande_quitter, bibliotheque, gestionnaire_fichiers, **kwargs
+    ):
+        super().__init__(parent, commande_quitter, **kwargs)
+        self.bibliotheque = bibliotheque
+        self.gestionnaire_fichiers = gestionnaire_fichiers
+
+        self.bouton_creer_sauvegarde = creer_bouton_action(
+            self.zone_actions,
+            "Créer Sauvegarde",
+            self.creer_sauvegarde,
+            font=("Helvetica", 15),
+        )
+        self.bouton_creer_sauvegarde.grid(row=0, column=0, sticky="e")
+
+        self.bouton_sauvegarder_donnees = creer_bouton_action(
+            self.zone_actions,
+            "Sauvegarde\ndonnées",
+            self.sauvegarder_donnees,
+            height=50,
+            font=("Helvetica", 15),
+        )
+        self.bouton_sauvegarder_donnees.grid(
+            row=1, column=0, sticky="e", pady=(18, 0)
+        )
+
+        self.panneau_contenu.grid_rowconfigure(0, weight=0)
+        self.panneau_contenu.grid_rowconfigure(1, weight=0)
+        self.panneau_contenu.grid_rowconfigure(2, weight=0)
+        self.panneau_contenu.grid_rowconfigure(3, weight=0)
+        self.panneau_contenu.grid_rowconfigure(4, weight=0)
+        self.panneau_contenu.grid_rowconfigure(5, weight=1)
+        self.panneau_contenu.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            self.panneau_contenu,
+            text="Statistiques",
+            text_color=COULEURS["texte"],
+            font=("Helvetica", 32),
+        ).grid(row=0, column=0, pady=(36, 34))
+
+        self.label_total_livres = self._creer_label_statistique(1)
+        self.label_livres_disponibles = self._creer_label_statistique(2)
+        self.label_livres_empruntes = self._creer_label_statistique(3)
+        self.label_total_utilisateurs = self._creer_label_statistique(4)
+
+        self.actualiser_statistiques()
+
+    def _creer_label_statistique(self, ligne):
+        label = ctk.CTkLabel(
+            self.panneau_contenu,
+            text="",
+            text_color=COULEURS["texte"],
+            font=("Helvetica", 22),
+        )
+        label.grid(row=ligne, column=0, pady=4)
+        return label
+
+    def actualiser_statistiques(self):
+        self.label_total_livres.configure(
+            text=f"Total des Livres : {self.bibliotheque.total_books()}"
+        )
+        self.label_livres_disponibles.configure(
+            text=f"Livres Disponibles : {self.bibliotheque.available_book_count()}"
+        )
+        self.label_livres_empruntes.configure(
+            text=f"Livres Empruntés : {self.bibliotheque.checked_out_book_count()}"
+        )
+        self.label_total_utilisateurs.configure(
+            text=f"Total des Utilisateurs : {len(self.bibliotheque.get_all_users())}"
+        )
+
+    def creer_sauvegarde(self):
+        try:
+            succes = self.gestionnaire_fichiers.create_backup()
+        except Exception as erreur:
+            messagebox.showerror(
+                "Sauvegarde impossible",
+                str(erreur),
+                parent=self.winfo_toplevel(),
+            )
+            return
+
+        if not succes:
+            messagebox.showerror(
+                "Sauvegarde impossible",
+                "Impossible de créer les fichiers de sauvegarde.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+
+        messagebox.showinfo(
+            "Sauvegarde créée",
+            "Les fichiers de sauvegarde ont été créés.",
+            parent=self.winfo_toplevel(),
+        )
+
+    def sauvegarder_donnees(self):
+        try:
+            succes = self.gestionnaire_fichiers.save_library_data(self.bibliotheque)
+        except Exception as erreur:
+            messagebox.showerror(
+                "Sauvegarde impossible",
+                str(erreur),
+                parent=self.winfo_toplevel(),
+            )
+            return
+
+        if not succes:
+            messagebox.showerror(
+                "Sauvegarde impossible",
+                "Impossible de sauvegarder les données de la bibliothèque.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+
+        messagebox.showinfo(
+            "Données sauvegardées",
+            "Les données de la bibliothèque ont été sauvegardées.",
+            parent=self.winfo_toplevel(),
+        )
 
 
 class ApplicationBibliotheque(ctk.CTk):
@@ -1091,7 +1211,12 @@ class ApplicationBibliotheque(ctk.CTk):
         self.pages = {
             "livres": PageLivres(self.conteneur, self.quitter, self.bibliotheque),
             "users": PageUsers(self.conteneur, self.quitter, self.bibliotheque),
-            "sauvegarde": PageSauvegarde(self.conteneur, self.quitter),
+            "sauvegarde": PageSauvegarde(
+                self.conteneur,
+                self.quitter,
+                self.bibliotheque,
+                self.gestionnaire_fichiers,
+            ),
         }
         for page in self.pages.values():
             page.grid(row=0, column=0, sticky="nsew")
@@ -1100,7 +1225,10 @@ class ApplicationBibliotheque(ctk.CTk):
         self.protocol("WM_DELETE_WINDOW", self.quitter)
 
     def afficher_page(self, cle):
-        self.pages[cle].tkraise()
+        page = self.pages[cle]
+        if isinstance(page, PageSauvegarde):
+            page.actualiser_statistiques()
+        page.tkraise()
         self.navigation.set_actif(cle)
 
     def quitter(self):
